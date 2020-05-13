@@ -45,7 +45,7 @@ NUM:		DB	31H,32H,33H,34H,35H,36H,37H,38H,39H,00H,30H,00H
 STR_KLM:	DB	'BLUE PILL', 0
 STR_TTL1:	DB	'ABN. HEARTBEAT', 0
 STR_TTL2:	DB	'DETECTOR', 0
-STR_INP:	DB	'Please Enter', 0
+STR_INP:	DB	'Please ENTER', 0
 STR_AGE:	DB	'Your AGE: ', 0
 STR_DTT1:	DB	'FINGER SENSOR', 0
 STR_DTT2:	DB	'WAITING...', 0
@@ -78,6 +78,7 @@ YEAR7:		DB	70,   85,   100
 YEAR8:		DB	70,   85,   100
 YEAR9:		DB	70,   85,   100
 YEAR10:		DB	60,   80,   100
+YEAR18:		DB	40,   60,   80
 
 ;=====! (MACROS) !=====;
 LCD_CLEAR MACRO
@@ -213,7 +214,7 @@ LCD_CMD:	;Give Command to LCD
 		CLR 	RW			;RW set to 0
 		SETB 	ENB			;E set to 1 (for enabling command)
 		CLR 	ENB			;Don't forget to clear E (command only trigger once)
-		MOV 	B, 	#LOW(-10H)	;Delay for -10H
+		MOV 	B, 	#LOW(-8H)	;Delay for -8H
 		ACALL 	DELAY
 		RET
 
@@ -223,7 +224,7 @@ LCD_TXT:	;Sending Text to LCD
 		CLR 	RW			;RW set to 0
 		SETB 	ENB			;E set to 1 (for enabling write command)
 		CLR 	ENB			;Don't forget to clear E (write command only trigger once)
-		MOV 	B, 	#LOW(-10H)	;Delay for -10H
+		MOV 	B, 	#LOW(-8H)	;Delay for -8H
 		ACALL 	DELAY
 		RET
 
@@ -356,10 +357,10 @@ PROCESS_RESULT:
 		SERIAL_PRINT 	STR_SUM
 		LCD_PRINT	STR_SUM
 		MOV	A, INPUTAGE
-		CJNE	A, #10, CHECKAGE
-		SJMP	ABOVE10Y
+		CJNE	A, #18, CHECKAGE
+		SJMP	ABOVE18Y
 		CHECKAGE:	JC	PROC
-		ABOVE10Y:	MOV	A, #10
+		ABOVE18Y:	MOV	A, #11
 		PROC:		MOV	B, #3
 				MUL	AB
 				MOV	B, A
