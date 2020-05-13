@@ -1,3 +1,24 @@
+; ======================= ( ABOUT PROGRAM ) ======================= ;
+;About		: Abnormal Heartbeat Detector
+;Author		: Kelompok. Blue Pill
+;Anggota	: - Bryan Oliver
+;		: - M. Farid Rahman
+;		: - Ramadhan Kalih Sewu
+;		: - Qisas Tazkia Hasanuddin
+;Matkul		: Sistem Berbasis Komputer
+;Hal		: Proyek Mikrokontroller 8051
+
+; ======================= ( DOCUMENTATION ) ======================= ;
+;Repository	: https://github.com/ramdanks/Abnormal_Heartbeat
+;License	: GNU GPL-3.0
+
+; ========================= ( SIMULATION ) ======================== ;
+;Tools		: Proteus 8 Professional
+;XTAL Freq.	: 12 MHz
+;MP Freq.	: 12 MHz
+;Baud Rate SRL	: 31250 BPS
+;Com. Interface : Serial, LCD 16x2
+
 KEYPAD 	 	EQU	P3
 KP_A		EQU	P3.0
 KP_B		EQU	P3.2
