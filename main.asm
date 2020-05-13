@@ -426,14 +426,14 @@ INIT_PORT:	;Initialize Port when First Bootup
 
 GOOD:		;Heartrate is Ideal
 		CLR 		LEDG			;Turn on Green LED
-		CLR		RESULTSUM		;Clear Previous Result
+		MOV		RESULTSUM, #0		;Clear Previous Result
 		LCD_PRINT 	STR_GOOD
 		SERIAL_PRINT_NL STR_GOOD
 		RET
 
 FAIR:		;Heartrate is Safe
 		CLR 		LEDY			;Turn on Yellow LED
-		CLR		RESULTSUM		;Clear Previous Result
+		MOV		RESULTSUM, #0		;Clear Previous Result
 		LCD_PRINT 	STR_FAIR
 		SERIAL_PRINT_NL STR_FAIR
 		RET
@@ -461,6 +461,9 @@ WAIT_RESET:
 		INP_RESET:	MOV 	KEYPAD,#11101111B
 				JB 	KP_3, WAIT_RESET	;Loop until Reset Button is Pressed!
 		CLR	BUZZ
+		SETB	LEDR
+		SETB	LEDG
+		SETB	LEDY
 		SERIAL_NL
 		RET
 
