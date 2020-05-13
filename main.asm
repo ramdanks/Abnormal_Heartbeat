@@ -27,7 +27,6 @@ ENB		EQU	P2.7
 
 RESULTBPM_ASC	EQU	30H
 RESULTBPM 	EQU	55H
-RESULTSUM 	EQU	5AH
 INPUTAGE	EQU	60H
 
 LCD16		EQU	P0
@@ -41,7 +40,7 @@ LCD_LN		EQU	000H
 ;=====! (DATA) !=====;
 	ORG	300H
 
-NUM:		DB	31H,32H,33H,34H,35H,36H,37H,38H,39H,69H,30H,30H
+NUM:		DB	31H,32H,33H,34H,35H,36H,37H,38H,39H,00H,30H,00H
 
 STR_KLM:	DB	'BLUE PILL', 0
 STR_TTL1:	DB	'ABN. HEARTBEAT', 0
@@ -50,8 +49,8 @@ STR_INP:	DB	'Please Enter', 0
 STR_AGE:	DB	'Your AGE: ', 0
 STR_DTT1:	DB	'FINGER SENSOR', 0
 STR_DTT2:	DB	'WAITING...', 0
-STR_KEP:	DB	'Keep FINGER', 0
-STR_ONS:	DB	'On The SENSOR', 0
+STR_LST1:	DB	'Keep FINGER', 0
+STR_LST2:	DB	'On The SENSOR', 0
 STR_HRT:	DB	'HB: ', 0
 STR_BPM:	DB	' (BPM)', 0
 STR_SUM:	DB	'Result: ', 0
@@ -59,6 +58,12 @@ STR_GOOD:	DB	'GOOD', 0
 STR_FAIR:	DB	'FAIR', 0
 STR_BAD:	DB	'BAD', 0
 STR_NL:		DB	'\r\n', 0
+
+STR_CNS_BRD:	DB	'=============================================', 0
+STR_CNS_OK:	DB	'Press (*) [Ok] to Continue...', 0
+STR_CNS_RST:	DB	'Press (#) [Reset] to Clear Input...', 0
+STR_CNS_CNF:	DB	'Age Confirm, Put your Finger on the Sensor!', 0
+STR_CNS_LST:	DB	'Keep Finger on the Sensor...', 0
 
 ;HeartRate		LowB  Ideal  UppB
 YEAR_RATE:
@@ -124,7 +129,7 @@ SERIAL_PRINT_NL MACRO STR_PARAM
 ENDM
 
 ;=====! (SUBROUTINE) !=====;
-	ORG	400H
+	ORG	500H
 
 SHOW7:		;Show 2 Digit Decimal in 7 Segment
 		MOV	A, R6		;MSB Saved in R6
@@ -253,12 +258,10 @@ KP_READ:
 		JNB KP_3, LCD_WRITE_KP
 
 		MOV KEYPAD,#11101111B
-	ENT:	INC KP_ST
-		JNB KP_1, KP_WAIT
+	STAR:	INC KP_ST
 	ZERO:	INC KP_ST
 		JNB KP_2, LCD_WRITE_KP
-	RST:	INC KP_ST
-		JNB KP_3, KP_WAIT
+	HASH:	INC KP_ST
 
 	NONE:	SJMP KP_READ
 
@@ -276,44 +279,53 @@ KP_READ:
 
 ;=====! (STATE ROUTINE) !=====;
 
-HELLO:		LCD_CLEAR
+HELLO:
+		LCD_CLEAR
 		SERIAL_PRINT_NL	STR_KLM
 		LCD_PRINT 	STR_KLM
 		ACALL		FIX_DELAY
 		LCD_CLEAR
 		SERIAL_PRINT_NL STR_TTL1
 		SERIAL_PRINT_NL	STR_TTL2
+		SERIAL_NL
 		LCD_PRINT2 	STR_TTL1, STR_TTL2
 		ACALL 	FIX_DELAY
 		RET
 
-INPUT:		LCD_CLEAR
-		LCD_PRINT2 	STR_INP, STR_AGE
+INPUT:
+		SERIAL_PRINT_NL STR_CNS_BRD
 		SERIAL_PRINT	STR_AGE
+		LCD_CLEAR
+		LCD_PRINT2 	STR_INP, STR_AGE
 		ACALL 	KP_READ
 		SUBB 	A, #30
 		MOV  	B, #10
 		MUL  	AB
 		MOV  	B, A
-		ACALL 	KP_READ
+		ACALL	KP_READ
 		SUBB 	A, #30
 		ADD  	A, B
 		MOV  	INPUTAGE, A
 		SERIAL_NL
+		SERIAL_PRINT_NL STR_CNS_OK
+		SERIAL_PRINT_NL STR_CNS_RST
+
+		MOV	KEYPAD, #11101111B
+		WAIT_KEY:
+		JNB 	KP_3, INPUT		;if Reset Button is Pressed ask Input Again!
+		JB	KP_1, WAIT_KEY		;Wait Untul OK Button is Pressed
 		RET
 
-KEEPMSG:	LCD_CLEAR
-		LCD_PRINT2 	STR_KEP, STR_ONS
+KEEPMSG:	SERIAL_PRINT_NL	STR_CNS_LST
+		LCD_CLEAR
+		LCD_PRINT2 	STR_LST1, STR_LST2
 		RET
 
 LISTEN:		;Process Heartbeat Sensor
 		LCD_CLEAR
 		LCD_PRINT2 	STR_DTT1, STR_DTT2
-
-		MOV 	A, #0		;A is used for counting BPM
+		SERIAL_PRINT_NL	STR_CNS_CNF
 		MOV 	R3, #0		;R3 is used for Counting Time
-		MOV 	TH0, #0 	;Set Timer Initiation from 0
-		MOV 	TL0, #0
 		LOWPULSE:	JNB	TF0, LOW_DETECT			;Low Signal Detection
 				CLR 	TF0
 				INC	R3
@@ -326,9 +338,12 @@ LISTEN:		;Process Heartbeat Sensor
 				CJNE	R3, #152, HIGH_DETECT		;Continue Detection if < 10 SEC
 				SJMP 	DONE_10SEC
 		HIGH_DETECT:	JB 	HRT_SNS, HIGHPULSE		;Wait untul High Pulse
-		SETB 	TR0						;Turn off Timer
 		CJNE 	A, #0, NOWCOUNTING				;First Heartbeat Pulse
 		ACALL 	KEEPMSG						;Show MSG to LCD
+		MOV 	A, #0						;A is used for counting BPM
+		MOV 	TH0, #0 					;Set Timer Initiation from 0
+		MOV 	TL0, #0
+		SETB 	TR0						;Turn on Timer on first Pulse
 		NOWCOUNTING:	INC 	A				;Increment Beat every Wave
 				SJMP 	LOWPULSE			;Detect Again!
 		DONE_10SEC:	CLR 	TR0				;Stop Timer
@@ -426,21 +441,19 @@ INIT_PORT:	;Initialize Port when First Bootup
 
 GOOD:		;Heartrate is Ideal
 		CLR 		LEDG			;Turn on Green LED
-		MOV		RESULTSUM, #0		;Clear Previous Result
 		LCD_PRINT 	STR_GOOD
 		SERIAL_PRINT_NL STR_GOOD
 		RET
 
 FAIR:		;Heartrate is Safe
 		CLR 		LEDY			;Turn on Yellow LED
-		MOV		RESULTSUM, #0		;Clear Previous Result
 		LCD_PRINT 	STR_FAIR
 		SERIAL_PRINT_NL STR_FAIR
 		RET
 
 BAD:		;Heartrate is Outside Safe Range
 		CLR 	LEDR			;Turn on Red LED
-		MOV	RESULTSUM, #69		;Buffer set to acknowledge BAD (Buzzer Reference)
+		SETB	BUZZ
 		LCD_PRINT 	STR_BAD
 		SERIAL_PRINT_NL STR_BAD
 		CJNE 	R7, #9, INC_LSB		;Increment Counter and Show Decimal Number
@@ -454,12 +467,8 @@ BAD:		;Heartrate is Outside Safe Range
 				RET
 
 WAIT_RESET:
-		MOV	A, RESULTSUM		;Load Buffer Acknowledge
-		CJNE	A, #69, INP_RESET	;If BAD
-		CPL	BUZZ			;Buffer Will Beep Beep!
-		ACALL	FIX_DELAY
-		INP_RESET:	MOV 	KEYPAD,#11101111B
-				JB 	KP_3, WAIT_RESET	;Loop until Reset Button is Pressed!
+		MOV 	KEYPAD,#11101111B
+		JB 	KP_3, WAIT_RESET	;Loop until Reset Button is Pressed!
 		CLR	BUZZ
 		SETB	LEDR
 		SETB	LEDG
@@ -473,9 +482,9 @@ WAIT_RESET:
 ;Inisiasi
 ACALL 	INIT_PORT
 ACALL 	LCD_INIT
+ACALL	HELLO
 
-MAIN:	ACALL	HELLO
-	ACALL 	INPUT
+MAIN:	ACALL 	INPUT
 	ACALL 	LISTEN
 	ACALL	CONVERT
 	ACALL 	SHOWBPM
