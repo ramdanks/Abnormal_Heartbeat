@@ -1,34 +1,47 @@
-KEYPAD  EQU	P0
+KEYPAD 	 	EQU	P3
+KP_A		EQU	P3.0
+KP_B		EQU	P3.2
+KP_C		EQU	P3.3
+KP_D		EQU	P3.4
+KP_1		EQU	P3.5
+KP_2		EQU	P3.6
+KP_3		EQU	P3.7
+KP_ST		EQU	0H
 
-SEVSEG	EQU	P1
-S_LSB	EQU	07H
-S_MSB	EQU	06H
+BAUD_RATE	EQU	LOW(-1) 	;31250 Baud Rate
 
-HRT_SNS EQU	P2.0
+SEVSEG		EQU	P1
+S_LSB		EQU	07H
+S_MSB		EQU	06H
 
-BUZZ	EQU	P2.1
-LEDR	EQU	P2.2
-LEDY	EQU	P2.3
-LEDG	EQU	P2.4
+HRT_SNS	 	EQU	P2.0
 
-RS	EQU	P2.5
-RW	EQU	P2.6
-ENB	EQU	P2.7
+BUZZ		EQU	P2.1
+LEDR		EQU	P2.2
+LEDY		EQU	P2.3
+LEDG		EQU	P2.4
 
+RS		EQU	P2.5
+RW		EQU	P2.6
+ENB		EQU	P2.7
+
+RESULTBPM_ASC	EQU	30H
 RESULTBPM 	EQU	55H
 RESULTSUM 	EQU	5AH
 INPUTAGE	EQU	60H
 
-LCD16	EQU	P3
-LCD_ACT	EQU	038H
-LCD_ON	EQU	00FH
-LCD_CLR	EQU	001H
-LCD_LN1	EQU	080H
-LCD_LN2	EQU	0C0H
-LCD_LN	EQU	000H
+LCD16		EQU	P0
+LCD_ACT		EQU	038H
+LCD_ON		EQU	00FH
+LCD_CLR		EQU	001H
+LCD_LN1		EQU	080H
+LCD_LN2		EQU	0C0H
+LCD_LN		EQU	000H
 
 ;=====! (DATA) !=====;
 	ORG	300H
+
+NUM:		DB	31H,32H,33H,34H,35H,36H,37H,38H,39H,69H,30H,30H
 
 STR_KLM:	DB	'BLUE PILL', 0
 STR_TTL1:	DB	'ABN. HEARTBEAT', 0
@@ -45,8 +58,9 @@ STR_SUM:	DB	'Result: ', 0
 STR_GOOD:	DB	'GOOD', 0
 STR_FAIR:	DB	'FAIR', 0
 STR_BAD:	DB	'BAD', 0
+STR_NL:		DB	'\r\n', 0
 
-;HeartRate	LOWB  Good  UPPB
+;HeartRate		LowB  Ideal  UppB
 YEAR_RATE:
 YEAR0:		DB	80,   120,  160
 YEAR1:		DB	80,   105,  130
@@ -60,173 +74,272 @@ YEAR8:		DB	70,   85,   100
 YEAR9:		DB	70,   85,   100
 YEAR10:		DB	60,   80,   100
 
+;=====! (MACROS) !=====;
+LCD_CLEAR MACRO
+	MOV 	A, #LCD_CLR
+	ACALL	LCD_CMD
+ENDM
+
+LCD_NL MACRO
+	MOV	A, #LCD_LN2
+	ACALL	LCD_CMD
+ENDM
+
+LCD_PRINT MACRO STR_PARAM
+	MOV	DPTR, #STR_PARAM
+	ACALL	LCD_WRITE
+ENDM
+
+LCD_PRINT_RAM MACRO STR_PARAM
+	MOV	R0, #STR_PARAM
+	ACALL	LCD_WRITERAM
+ENDM
+
+LCD_PRINT2 MACRO STR_P1, STR_P2
+	MOV	DPTR, #STR_P1
+	ACALL	LCD_WRITE
+	LCD_NL
+	MOV	DPTR, #STR_P2
+	ACALL	LCD_WRITE
+ENDM
+
+SERIAL_NL MACRO
+	MOV	DPTR, #STR_NL
+	ACALL	SSTR
+ENDM
+
+SERIAL_PRINT MACRO STR_PARAM
+	MOV 	DPTR, #STR_PARAM
+	ACALL 	SSTR
+ENDM
+
+SERIAL_PRINT_RAM MACRO MEM_PARAM
+	MOV 	A, MEM_PARAM
+	ACALL 	WRITE_SERIAL_RAM
+ENDM
+
+SERIAL_PRINT_NL MACRO STR_PARAM
+	SERIAL_PRINT STR_PARAM
+	SERIAL_NL
+ENDM
 
 ;=====! (SUBROUTINE) !=====;
 	ORG	400H
 
-SHOW7:
-		MOV	A, R6
-		MOV	B, #4
-		SL:	RL	A
+SHOW7:		;Show 2 Digit Decimal in 7 Segment
+		MOV	A, R6		;MSB Saved in R6
+		MOV	B, #4		;Shift Left 4 Times
+		SL:	RL	A	;4 Bit for MSB, 4 Bit for LSB
 			DJNZ	B, SL
-		ADD	A, R7
-		MOV	SEVSEG, A
+		ADD	A, R7		;LSB added in last 4 bit
+		MOV	SEVSEG, A	;Move 8 Bit Data (4 Bit MSB, 4 Bit LSB) to Port Seven Segment
 		RET
 
 SSTR:
-		SETB	SCON.6
-		MOV	TMOD, #20H
-		MOV	TH1, R0
-		SETB	TR1
-
-		SEND:	CLR	A
-				MOVC	A, @A+DPTR
-				JZ	S_RET
-				MOV	SBUF, A
-		WAIT:	JNB	TI, WAIT
-				CLR	TI
-
+		CLR	A
+		MOVC	A, @A+DPTR
+		JZ	S_RET
+		ACALL	WRITE_SERIAL_RAM
 		INC	DPTR
-		SJMP	SEND
+		SJMP	SSTR
 		S_RET:	RET
 
+WRITE_SERIAL_RAM:
+		MOV	SCON, #50H
+		MOV	TMOD, #20H
+		MOV	TH1,  #BAUD_RATE
+		SEND:	SETB	TR1
+			MOV	SBUF, A
+		WAIT:	JNB	TI, WAIT
+			CLR	TR1
+			CLR	TI
+			MOV	TL1, #0
+			MOV	TH1, #0
+			RET
+
 DELAY:
-		MOV TMOD, #01H
-		MOV 	TH0, B
-		SETB 	TR0
-		HERE:	JNB	TF0, HERE
-		CLR 	TR0
-		CLR 	TF0
+		MOV TMOD, #01H			;Timer 0 16 Bit
+		MOV 	TH0, B			;Parameter B is used to give Timer0 Initiation Value
+		SETB 	TR0			;Start Timer 0
+		HERE:	JNB	TF0, HERE	;Wait until Overflow
+		CLR 	TR0			;Stop Timer
+		CLR 	TF0			;Clear Overflow
 		RET
 
 FIX_DELAY:
-		MOV A, #10H
-		D_AGAIN:	MOV B, #LOW(-0FFH)
-					ACALL DELAY
-					DJNZ A, D_AGAIN
+		MOV A, #10H			;Nested Loop Delay 10 Times!
+		D_AGAIN:MOV B, #LOW(-0FFH)	;Set Timer0 Initiation Value
+			ACALL DELAY		;Delay
+			DJNZ A, D_AGAIN		;Delay Again for 10 Times
 		RET
 
 ;=====! (LCD SUBROUTINE) !=====;
 
-LCD_INIT:
-		MOV	A,	#LCD_ACT
+LCD_INIT:	;Do the necessary thing to make LCD working
+		MOV	A,	#LCD_ACT	;Activate LCD with 2 Lines 5x7 Matrix
 		ACALL	LCD_CMD
-		MOV 	A, 	#LCD_ON
+		MOV 	A, 	#LCD_ON		;Turn on LCD with Cursor
 		ACALL	LCD_CMD
-		MOV 	A, 	#LCD_LN1
+		MOV 	A, 	#LCD_LN1	;Force cursor to 1st Line
 		ACALL 	LCD_CMD
 		RET
 
-LCD_AUTOWRITE:
-		MOV	A,	LCD_LN
-		JNZ	LINE2
-		MOV 	A,	#LCD_LN1
-		ACALL	LCD_CMD
-		MOV 	A,	#LCD_CLR
-		ACALL	LCD_CMD
-		MOV	LCD_LN, #01H
-		SJMP	LCD_ONEWRITE
-	LINE2:	MOV 	A,	#LCD_LN2
-		ACALL	LCD_CMD
-		MOV	LCD_LN, #00H
-LCD_ONEWRITE:
-		CLR	A
-		MOVC	A,	@A+DPTR
-		JZ	LCD_RET
-		ACALL	LCD_TXT
-		INC	DPTR
-		SJMP	LCD_ONEWRITE
+LCD_WRITE:	;Write String to LCD (from Cursor Location)
+		CLR	A		;Clear A
+		MOVC	A,	@A+DPTR	;Load next Char
+		JZ	LCD_RET		;if Content of A is NULL, then we're done printing
+		ACALL	LCD_TXT		;Show to LCD using write command
+		INC	DPTR		;Proceed to next Char
+		SJMP	LCD_WRITE	;Loop again until Reaches NULL Terminating Char
 		LCD_RET: RET
 
-LCD_WRITERAM:
-		MOV A, @R0
-		JZ LCD_RET
-		ACALL LCD_TXT
-		INC R0
-		SJMP LCD_WRITERAM
+LCD_WRITERAM:	;Write Text to LCD from Text Located in RAM
+		;The reason our project use this, is because we cannot use DPTR for accessing RAM
+		;So we create alternative by using R0 as a parameter.
+		MOV A, @R0			;R0 is parameter for memory location of string (Like DPTR)
+		JZ LCD_RET			;if Content of A is NULL, then we're done printing
+		ACALL LCD_TXT			;Show to LCD using write command
+		INC R0				;Proceed to next Char
+		SJMP LCD_WRITERAM		;Loop again until Reaches NULL Terminating Char
 
-LCD_CMD:
-		MOV 	LCD16, 	A
-		CLR 	RS
-		CLR 	RW
-		SETB 	ENB
-		CLR 	ENB
-		MOV 	B, 	#LOW(-10H)
+LCD_CMD:	;Give Command to LCD
+		MOV 	LCD16, 	A		;A is parameter for LCD Command
+		CLR 	RS			;RS set to 0
+		CLR 	RW			;RW set to 0
+		SETB 	ENB			;E set to 1 (for enabling command)
+		CLR 	ENB			;Don't forget to clear E (command only trigger once)
+		MOV 	B, 	#LOW(-10H)	;Delay for -10H
 		ACALL 	DELAY
 		RET
 
-LCD_TXT:
-		MOV 	LCD16, 	A
-		SETB 	RS
-		CLR 	RW
-		SETB 	ENB
-		CLR 	ENB
-		MOV 	B, 	#LOW(-10H)
+LCD_TXT:	;Sending Text to LCD
+		MOV 	LCD16, 	A		;A is parameter for char in ASCII (to write in LCD)
+		SETB 	RS			;RS set to 1
+		CLR 	RW			;RW set to 0
+		SETB 	ENB			;E set to 1 (for enabling write command)
+		CLR 	ENB			;Don't forget to clear E (write command only trigger once)
+		MOV 	B, 	#LOW(-10H)	;Delay for -10H
 		ACALL 	DELAY
+		RET
+
+;=====! (KEYPAD SUBROUTINE) !=====;
+
+KP_READ:
+		SETB	KEYPAD
+		MOV 	DPTR,#NUM
+
+		MOV KEYPAD, #11111110B
+	ONE:	MOV KP_ST,#00H
+		JNB KP_1, LCD_WRITE_KP
+	TWO:	INC KP_ST
+		JNB KP_2, LCD_WRITE_KP
+	THR:	INC KP_ST
+		JNB KP_3, LCD_WRITE_KP
+
+		MOV KEYPAD,#11111011B
+	FOUR:	INC KP_ST
+		JNB KP_1, LCD_WRITE_KP
+	FIVE:	INC KP_ST
+		JNB KP_2, LCD_WRITE_KP
+	SIX:	INC KP_ST
+		JNB KP_3, LCD_WRITE_KP
+
+		MOV KEYPAD,#11110111B
+	SVN:	INC KP_ST
+		JNB KP_1, LCD_WRITE_KP
+	EGT:	INC KP_ST
+		JNB KP_2, LCD_WRITE_KP
+	NINE:	INC KP_ST
+		JNB KP_3, LCD_WRITE_KP
+
+		MOV KEYPAD,#11101111B
+	ENT:	INC KP_ST
+		JNB KP_1, KP_WAIT
+	ZERO:	INC KP_ST
+		JNB KP_2, LCD_WRITE_KP
+	RST:	INC KP_ST
+		JNB KP_3, KP_WAIT
+
+	NONE:	SJMP KP_READ
+
+	LCD_WRITE_KP:
+		MOV 	A, KP_ST
+		MOVC 	A,@A+DPTR
+		ACALL	WRITE_SERIAL_RAM
+		ACALL 	LCD_TXT
+
+	KP_WAIT:
+		JNB	KP_1, KP_WAIT
+		JNB	KP_2, KP_WAIT
+		JNB	KP_3, KP_WAIT
 		RET
 
 ;=====! (STATE ROUTINE) !=====;
 
-HELLO:
-		MOV DPTR, #STR_KLM
-		ACALL LCD_ONEWRITE
-		ACALL FIX_DELAY
-		MOV A, #LCD_CLR
-		ACALL LCD_CMD
-		MOV DPTR, #STR_TTL1
-		ACALL LCD_AUTOWRITE
-		MOV DPTR, #STR_TTL2
-		ACALL  LCD_AUTOWRITE
-		ACALL FIX_DELAY
+HELLO:		LCD_CLEAR
+		SERIAL_PRINT_NL	STR_KLM
+		LCD_PRINT 	STR_KLM
+		ACALL		FIX_DELAY
+		LCD_CLEAR
+		SERIAL_PRINT_NL STR_TTL1
+		SERIAL_PRINT_NL	STR_TTL2
+		LCD_PRINT2 	STR_TTL1, STR_TTL2
+		ACALL 	FIX_DELAY
 		RET
 
-INPUT:
-		MOV DPTR, #STR_INP
-		ACALL LCD_AUTOWRITE
-		MOV DPTR, #STR_AGE
-		ACALL LCD_AUTOWRITE
+INPUT:		LCD_CLEAR
+		LCD_PRINT2 	STR_INP, STR_AGE
+		SERIAL_PRINT	STR_AGE
+		ACALL 	KP_READ
+		SUBB 	A, #30
+		MOV  	B, #10
+		MUL  	AB
+		MOV  	B, A
+		ACALL 	KP_READ
+		SUBB 	A, #30
+		ADD  	A, B
+		MOV  	INPUTAGE, A
+		SERIAL_NL
 		RET
 
-KEEPMSG:	MOV DPTR, #STR_KEP
-		ACALL LCD_AUTOWRITE
-		MOV DPTR, #STR_ONS
-		ACALL LCD_AUTOWRITE
+KEEPMSG:	LCD_CLEAR
+		LCD_PRINT2 	STR_KEP, STR_ONS
 		RET
 
-LISTEN:
-		MOV DPTR, #STR_DTT1
-		ACALL LCD_AUTOWRITE
-		MOV DPTR, #STR_DTT2
-		ACALL LCD_AUTOWRITE
+LISTEN:		;Process Heartbeat Sensor
+		LCD_CLEAR
+		LCD_PRINT2 	STR_DTT1, STR_DTT2
 
-		MOV 	A, #0
-		MOV 	R3, #0
-		MOV 	TH0, #0
+		MOV 	A, #0		;A is used for counting BPM
+		MOV 	R3, #0		;R3 is used for Counting Time
+		MOV 	TH0, #0 	;Set Timer Initiation from 0
 		MOV 	TL0, #0
-		LOWPULSE:	JNB	TF0, LOW_DETECT
+		LOWPULSE:	JNB	TF0, LOW_DETECT			;Low Signal Detection
 				CLR 	TF0
 				INC	R3
-				CJNE	R3, #152, LOW_DETECT
+				CJNE	R3, #152, LOW_DETECT		;Continue Detection if < 10 SEC
 				SJMP 	DONE_10SEC
-				LOW_DETECT:	JNB	HRT_SNS, LOWPULSE
-		HIGHPULSE:	JNB	TF0, HIGH_DETECT
+		LOW_DETECT:	JNB 	HRT_SNS, LOWPULSE		;Wait until Low Pulse
+		HIGHPULSE:	JNB	TF0, HIGH_DETECT		;High Signal Detection
 				CLR 	TF0
 				INC	R3
-				CJNE	R3, #152, HIGH_DETECT
+				CJNE	R3, #152, HIGH_DETECT		;Continue Detection if < 10 SEC
 				SJMP 	DONE_10SEC
-				HIGH_DETECT:	JB	HRT_SNS, HIGHPULSE
-		SETB 	TR0
-		CJNE 	A, #0, NOWCOUNTING
-		ACALL 	KEEPMSG
-		NOWCOUNTING:	INC 	A
-				SJMP 	LOWPULSE
-		DONE_10SEC:	CLR 	TR0
-				MOV 	B, #6
-				MUL 	AB
-				MOV	RESULTBPM, A
+		HIGH_DETECT:	JB 	HRT_SNS, HIGHPULSE		;Wait untul High Pulse
+		SETB 	TR0						;Turn off Timer
+		CJNE 	A, #0, NOWCOUNTING				;First Heartbeat Pulse
+		ACALL 	KEEPMSG						;Show MSG to LCD
+		NOWCOUNTING:	INC 	A				;Increment Beat every Wave
+				SJMP 	LOWPULSE			;Detect Again!
+		DONE_10SEC:	CLR 	TR0				;Stop Timer
+				MOV 	B, #6				;Multiply By 6
+				MUL 	AB				;Because we Only Scan 10 SEC
+				MOV	RESULTBPM, A			;Save BPM
 				RET
 
 PROCESS_RESULT:
+		SERIAL_PRINT 	STR_SUM
+		LCD_PRINT	STR_SUM
 		MOV	A, INPUTAGE
 		CJNE	A, #10, CHECKAGE
 		SJMP	ABOVE10Y
@@ -237,13 +350,45 @@ PROCESS_RESULT:
 				MOV	B, A
 				MOV	DPTR, #YEAR_RATE
 
+		LOWERBOUND_CHECK:
 		MOVC	A, @A+DPTR
+		SUBB	A, RESULTBPM
+		JNC	TRIGGERBAD
 
+		UPPERBOUND_CHECK:
+		MOV	A, B
+		INC	A
+		INC	A
+		MOVC	A, @A+DPTR
+		SUBB	A, RESULTBPM
+		JC	TRIGGERBAD
 
+		CHECK_GOOD:
+		INC	B
 
+		LOWERBOUND_GOOD:
+		MOV	A, B
+		MOVC	A, @A+DPTR
+		SUBB	A, #10
+		SUBB	A, RESULTBPM
+		JNC	TRIGGERFAIR
+
+		UPPERBOUND_GOOD:
+		MOV	A, B
+		MOVC	A, @A+DPTR
+		ADD	A, #10
+		SUBB	A, RESULTBPM
+		JC	TRIGGERFAIR
+
+		TRIGGERGOOD:	ACALL GOOD
+				RET
+		TRIGGERFAIR:	ACALL FAIR
+				RET
+		TRIGGERBAD:	ACALL BAD
 				RET
 
-CONVERT:	MOV 	A, RESULTBPM
+CONVERT:	;Convert BPM from 1 Block RAM to 3 ASCII char
+		MOV 	A, RESULTBPM
 		MOV 	B, #10
 		DIV 	AB
 		MOV 	32H, B
@@ -251,76 +396,76 @@ CONVERT:	MOV 	A, RESULTBPM
 		DIV 	AB
 		MOV 	31H, B
 		MOV 	30H, A
-
-		ORL 	32H, #30H
-		ORL 	31H, #30H
+		;Change Based Number to ASCII
 		ORL 	30H, #30H
-
+		ORL 	31H, #30H
+		ORL 	32H, #30H
+		SERIAL_PRINT STR_HRT
+		SERIAL_PRINT_RAM 30H
+		SERIAL_PRINT_RAM 31H
+		SERIAL_PRINT_RAM 32H
+		SERIAL_PRINT_NL STR_BPM
 		RET
 
-SHOWBPM:	MOV 	A, #LCD_CLR
-		ACALL 	LCD_CMD
-		MOV 	DPTR, #STR_HRT
-		ACALL 	LCD_ONEWRITE
-		MOV 	R0, #30H
-		ACALL 	LCD_WRITERAM
-		MOV 	DPTR, #STR_BPM
-		ACALL 	LCD_ONEWRITE
-		MOV 	A, #LCD_LN2
-		ACALL 	LCD_CMD
-		MOV 	DPTR, #STR_SUM
-		ACALL 	LCD_ONEWRITE
+SHOWBPM:	;Show Result HeartRate (BPM), to LCD
+		LCD_CLEAR
+		LCD_PRINT 	STR_HRT
+		LCD_PRINT_RAM 	RESULTBPM_ASC
+		LCD_PRINT 	STR_BPM
+		LCD_NL
 		RET
 
-INIT_PORT:
-		CLR	BUZZ
-		MOV 	S_MSB, #0
-		MOV 	S_LSB, #0
-		ACALL 	SHOW7
-		CLR 	HRT_SNS
-		MOV 	KEYPAD, #00001111B
-		RET
-GOOD:
-		CLR 	LEDG
-		CLR	RESULTSUM
-		MOV	DPTR, #STR_GOOD
-		ACALL	LCD_ONEWRITE
-		RET
-FAIR:
-		CLR 	LEDY
-		CLR	RESULTSUM
-		MOV	DPTR, #STR_FAIR
-		ACALL	LCD_ONEWRITE
+INIT_PORT:	;Initialize Port when First Bootup
+		CLR	BUZZ			;Turn off Buzzer
+		MOV 	S_MSB, #0		;Clear MSB Counter
+		MOV 	S_LSB, #0		;Clear LSB Counter
+		ACALL 	SHOW7			;Show Counter
+		CLR 	HRT_SNS			;Clear Port Sensor
+		SETB	KEYPAD
 		RET
 
-BAD:
-		CLR 	LEDR
-		MOV	RESULTSUM, #69
-		MOV	DPTR, #STR_BAD
-		ACALL	LCD_ONEWRITE
-		CJNE 	R7, #9, INC_LSB
+GOOD:		;Heartrate is Ideal
+		CLR 		LEDG			;Turn on Green LED
+		CLR		RESULTSUM		;Clear Previous Result
+		LCD_PRINT 	STR_GOOD
+		SERIAL_PRINT_NL STR_GOOD
+		RET
+
+FAIR:		;Heartrate is Safe
+		CLR 		LEDY			;Turn on Yellow LED
+		CLR		RESULTSUM		;Clear Previous Result
+		LCD_PRINT 	STR_FAIR
+		SERIAL_PRINT_NL STR_FAIR
+		RET
+
+BAD:		;Heartrate is Outside Safe Range
+		CLR 	LEDR			;Turn on Red LED
+		MOV	RESULTSUM, #69		;Buffer set to acknowledge BAD (Buzzer Reference)
+		LCD_PRINT 	STR_BAD
+		SERIAL_PRINT_NL STR_BAD
+		CJNE 	R7, #9, INC_LSB		;Increment Counter and Show Decimal Number
 		CJNE	R6, #9, INC_MSB
 		SJMP 	B_RET
 		INC_MSB:	INC 	R6
 				MOV 	R7, #0
 				SJMP 	B_RET
 		INC_LSB: 	INC 	R7
-		B_RET:		ACALL	SHOW7
+		B_RET:		ACALL	SHOW7	;Show Counter in 7 Segment Form
 				RET
 
 WAIT_RESET:
-		MOV	A, RESULTSUM
-		CJNE	A, #69, WAIT_RESET
-		CPL	BUZZ
+		MOV	A, RESULTSUM		;Load Buffer Acknowledge
+		CJNE	A, #69, INP_RESET	;If BAD
+		CPL	BUZZ			;Buffer Will Beep Beep!
 		ACALL	FIX_DELAY
-		SJMP 	WAIT_RESET
-		W_RET:	RET
+		INP_RESET:	MOV 	KEYPAD,#11101111B
+				JB 	KP_3, WAIT_RESET	;Loop until Reset Button is Pressed!
+		CLR	BUZZ
+		SERIAL_NL
+		RET
 
 ;========! (MAIN) !========;
 	ORG	00H
-
-MOV INPUTAGE, #19
-ACALL	PROCESS_RESULT
 
 ;Inisiasi
 ACALL 	INIT_PORT
