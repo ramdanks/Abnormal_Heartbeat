@@ -2,7 +2,7 @@
 
 # Simulation
 - Proteus 8 Professional
-![](screenshots/sim.png)
+## ![](screenshots/sim.png)
 
 # Specifications
 - XTAL Freq = 12 MHz
